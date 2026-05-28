@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EletricMap - Tempo Real</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 100%; width: 100%; z-index: 1; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 antialiased">
+
+    <div id="toast" class="fixed top-5 right-5 z-[9999] transform translate-y-[-20px] opacity-0 transition-all duration-300 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl hidden flex items-center space-x-2">
+        <span id="toast-message">Erro</span>
+    </div>
+
+    <div id="paywall-screen" class="fixed inset-0 bg-slate-950/90 z-[9000] hidden flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6 border border-slate-100">
+            <div class="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto text-amber-500 text-3xl">⚠️</div>
+            <h2 class="text-xl font-black text-slate-900">Assinatura Pendente</h2>
+            <p class="text-sm text-slate-500">Realize o pagamento da mensalidade de R$ 20,00 para acessar os chamados e o mapa em tempo real.</p>
+            <a id="paywall-link" href="#" target="_blank" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-md transition-colors text-center">Pagar com Asaas</a>
+            <button onclick="logout()" class="text-sm text-slate-400 hover:text-slate-600 underline">Sair da conta</button>
+        </div>
+    </div>
+
+    <section id="view-login" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-md w-full max-w-md border border-slate-100">
+            <h1 class="text-3xl font-black text-center text-slate-900 mb-8 tracking-tight">Eletric<span class="text-blue-600">Map</span></h1>
+            <form id="form-login" class="space-y-4">
+                <input type="email" id="login-email" placeholder="E-mail" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="password" id="login-password" placeholder="Senha" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors"><span id="login-btn-text">Entrar</span></button>
+            </form>
+            <p class="mt-6 text-center text-sm">Não tem conta? <button onclick="switchView('view-register')" class="text-blue-600 font-bold hover:underline">Cadastre-se</button></p>
+        </div>
+    </section>
+
+    <section id="view-register" class="min-h-screen flex items-center justify-center p-4 hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-md w-full max-w-md border border-slate-100">
+            <h2 class="text-2xl font-black text-center mb-6 text-slate-800">Criar Conta</h2>
+            <form id="form-register" class="space-y-4">
+                <input type="text" id="reg-nome" placeholder="Nome Completo" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="email" id="reg-email" placeholder="E-mail" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="tel" id="reg-telefone" placeholder="WhatsApp (DDD) 9XXXX-XXXX" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="reg-cpf" placeholder="CPF (Apenas números)" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="password" id="reg-password" placeholder="Senha" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select id="reg-tipo" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="CLIENTE">Cliente (Acesso Gratuito)</option>
+                    <option value="ELETRICISTA">Eletricista (Mensalista)</option>
+                </select>
+                <div class="flex items-start space-x-2 pt-2">
+                    <input type="checkbox" id="reg-lgpd" required class="mt-1">
+                    <label class="text-xs text-slate-500">Aceito os termos e condições da LGPD.</label>
+                </div>
+                <button type="submit" id="reg-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors">Cadastrar</button>
+            </form>
+            <p class="mt-6 text-center text-sm"><button onclick="switchView('view-login')" class="text-blue-600 font-bold hover:underline">Voltar ao Login</button></p>
+        </div>
+    </section>
+
+    <section id="view-dashboard" class="min-h-screen flex flex-col md:flex-row hidden">
+        <aside class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between p-4 border-r border-slate-800 shrink-0">
+            <div>
+                <h1 class="text-2xl font-black text-center mb-8 py-4 tracking-tight">Eletric<span class="text-blue-500">Map</span></h1>
+                <nav class="space-y-1">
+                    <button id="btn-dash-home" onclick="switchTab('dash-home')" class="w-full text-left px-4 py-3 rounded-lg bg-blue-600 text-white font-medium transition-colors">🏠 Início</button>
+                    <button id="btn-dash-chamados" onclick="switchTab('dash-chamados')" class="w-full text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white font-medium transition-colors">📋 Chamados</button>
+                    <button id="btn-dash-perfil" onclick="switchTab('dash-perfil')" class="w-full text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white font-medium transition-colors">👤 Perfil</button>
+                </nav>
+            </div>
+            <div class="pt-4 border-t border-slate-800 flex justify-between items-center px-2">
+                <span id="user-display-name" class="font-medium text-sm text-slate-300 truncate">Usuário</span>
+                <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-medium transition-colors">Sair</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col bg-slate-50 relative overflow-hidden">
+            <div id="dash-home" class="flex-1 flex flex-col md:flex-row min-h-0">
+                <div class="w-full md:w-96 flex flex-col border-r border-slate-200 bg-white z-10 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+                    
+                    <div id="panel-cliente" class="flex flex-col flex-1 hidden p-6">
+                        <h2 class="text-xl font-bold mb-4 text-slate-800">Eletricistas Próximos</h2>
+                        <button onclick="getGPSLocation(true)" class="w-full bg-blue-600 hover:bg-blue-700 transition-colors text-white font-medium py-2.5 rounded-lg shadow-sm mb-4">
+                            🔄 Forçar Atualização
+                        </button>
+                        <p class="text-xs text-slate-400 text-center mb-2 flex items-center justify-center space-x-1">
+                            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse block"></span>
+                            <span>Buscando eletricistas (30s)...</span>
+                        </p>
+                        <div id="eletricistas-list" class="flex-1 overflow-y-auto space-y-3 mt-2 pr-1"></div>
+                    </div>
+
+                    <div id="panel-eletricista" class="p-6 flex flex-col items-center justify-center flex-1 hidden">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center text-3xl mb-4">⚡</div>
+                        <h2 class="text-xl font-bold text-center mb-6 text-slate-800">Painel de Atendimento</h2>
+                        <div class="flex items-center space-x-4 mb-4 bg-slate-50 py-4 px-6 rounded-xl border border-slate-100 w-full justify-center">
+                            <span id="status-label" class="text-sm font-bold text-slate-400 uppercase tracking-wider">Offline</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="status-toggle" onchange="toggleOnlineStatus()" class="sr-only peer">
+                                <div class="w-14 h-7 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                        </div>
+                        <p id="timer-indicator" class="text-xs text-emerald-600 font-medium hidden flex items-center space-x-1 bg-emerald-50 py-1.5 px-3 rounded-full">
+                            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse block"></span>
+                            <span>Visível no Mapa (30s)</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div id="map-container" class="flex-1 relative bg-slate-200 h-[400px] md:h-auto z-0">
+                    <div id="map"></div>
+                    <div class="absolute bottom-4 left-4 z-[1000] bg-white/95 px-3 py-1.5 rounded shadow border border-slate-200 text-xs font-bold text-slate-700 flex items-center space-x-1">
+                        <span>📐 Raio do GPS: 15 km</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="dash-chamados" class="flex-1 overflow-y-auto p-6 md:p-10 hidden w-full max-w-5xl mx-auto">
+                <div class="flex items-center justify-between mb-8">
+                    <h2 class="text-2xl font-black text-slate-800">Histórico de Chamados</h2>
+                    <button onclick="carregarChamados()" class="bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider transition-colors flex items-center space-x-1">
+                        <span>🔄 Atualizar Agora</span>
+                    </button>
+                </div>
+                <div id="lista-chamados" class="space-y-4">
+                    <div class="text-center py-10 text-slate-400">Carregando chamados...</div>
+                </div>
+            </div>
+
+            <div id="dash-perfil" class="flex-1 overflow-y-auto p-6 md:p-10 hidden w-full max-w-3xl mx-auto">
+                <h2 class="text-2xl font-black text-slate-800 mb-8">Configurações de Perfil</h2>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-900 px-8 py-6 flex items-center space-x-4">
+                        <div class="w-20 h-20 bg-blue-500 text-white rounded-full flex items-center justify-center text-3xl font-black shadow-lg border-4 border-slate-800" id="perfil-avatar">U</div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-white" id="perfil-nome">Nome do Usuário</h3>
+                            <span class="inline-block mt-1 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide" id="perfil-role-badge">TIPO</span>
+                        </div>
+                    </div>
+                    <div class="p-8 space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">Status da Conta</label>
+                                <div class="flex items-center space-x-2 text-slate-800 font-medium">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                    <span>Ativa e Validada</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">E-mail Cadastrado</label>
+                                <p class="text-slate-800 font-medium" id="perfil-email-display">Carregando...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <script>
+        const API_URL = "https://eletricmap-api-d4cbe8gkbzakdee6.centralus-01.azurewebsites.net";
+        let map = null, clientMarker = null, professionalsLayer = null;
+        let currentLat = -22.8262, currentLon = -47.0755;
+        let loopLocalizacaoEletricista = null, loopBuscaCliente = null, loopChamados = null;
+
+        function showToast(message, bgColor = "bg-red-500") {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            toast.className = `fixed top-5 right-5 z-[9999] transform transition-all duration-300 ${bgColor} text-white px-6 py-3 rounded-lg shadow-xl flex items-center`;
+            toast.classList.remove('hidden');
+            setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; }, 50);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(-20px)'; setTimeout(() => toast.classList.add('hidden'), 300); }, 4500);
+        }
+
+        function switchTab(tabId) {
+            ['dash-home', 'dash-chamados', 'dash-perfil'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+                document.getElementById('btn-' + id).classList.remove('bg-blue-600', 'text-white');
+                document.getElementById('btn-' + id).classList.add('text-slate-400');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+            document.getElementById('btn-' + tabId).classList.add('bg-blue-600', 'text-white');
+            document.getElementById('btn-' + tabId).classList.remove('text-slate-400');
+            
+            if (tabId === 'dash-perfil') {
+                const nome = localStorage.getItem('user_name') || 'Usuário';
+                document.getElementById('perfil-email-display').innerText = localStorage.getItem('user_email');
+                document.getElementById('perfil-nome').innerText = nome;
+                document.getElementById('perfil-avatar').innerText = nome.charAt(0).toUpperCase();
+                document.getElementById('perfil-role-badge').innerText = localStorage.getItem('user_role');
+            }
+            if (tabId === 'dash-home' && map) setTimeout(() => map.invalidateSize(), 150);
+            if (tabId === 'dash-chamados') carregarChamados();
+        }
+
+        function switchView(viewId) {
+            document.querySelectorAll('body > section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(viewId).classList.remove('hidden');
+            if (viewId === 'view-dashboard') {
+                initMap();
+                getGPSLocation(true);
+                switchTab('dash-home');
+                
+                // INICIA LOOPS DE ATUALIZAÇÃO SILENCIOSOS (A CADA 30 SEGUNDOS)
+                if (localStorage.getItem('user_role') === 'CLIENTE' && !loopBuscaCliente) {
+                    loopBuscaCliente = setInterval(() => { getGPSLocation(false); }, 30000);
+                }
+                if (!loopChamados) {
+                    loopChamados = setInterval(() => { carregarChamados(); }, 30000);
+                }
+            }
+        }
+
+        function verificarPaywall(statusAssinatura, role) {
+            const paywallScreen = document.getElementById('paywall-screen');
+            if (role === 'CLIENTE' || statusAssinatura === 'ativo') { paywallScreen.classList.add('hidden'); return false; }
+            paywallScreen.classList.remove('hidden'); return true;
+        }
+
+        function initMap() {
+            if (map !== null) return;
+            map = L.map('map').setView([currentLat, currentLon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            professionalsLayer = L.layerGroup().addTo(map);
+        }
+
+        function getGPSLocation(recenter = false) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => { currentLat = pos.coords.latitude; currentLon = pos.coords.longitude; updateMapCenter(recenter); },
+                    () => { updateMapCenter(recenter); },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else { updateMapCenter(recenter); }
+        }
+
+        function updateMapCenter(recenter) {
+            if (map) {
+                if (recenter) map.setView([currentLat, currentLon], 14);
+                if (clientMarker) map.removeLayer(clientMarker);
+                clientMarker = L.marker([currentLat, currentLon]).addTo(map).bindPopup("Você está aqui");
+                if (localStorage.getItem('user_role') === 'CLIENTE') buscarEletricistasAPI();
+            }
+        }
+
+        // --- SUBMITS DE FORMULÁRIO ---
+        document.getElementById('form-register').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('reg-btn');
+            btn.innerText = "Processando..."; btn.disabled = true;
+
+            const payload = { 
+                nome: document.getElementById('reg-nome').value, 
+                email: document.getElementById('reg-email').value, 
+                telefone: document.getElementById('reg-telefone').value, 
+                cpf: document.getElementById('reg-cpf').value, 
+                password: document.getElementById('reg-password').value, 
+                tipo_usuario: document.getElementById('reg-tipo').value, 
+                consentimento_lgpd: document.getElementById('reg-lgpd').checked, 
+                versao_termos: "1.0" 
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail ? (typeof data.detail === 'object' ? JSON.stringify(data.detail) : data.detail) : "Erro na API.");
+                if (payload.tipo_usuario === 'ELETRICISTA' && data.asaas_payment_url) { 
+                    showToast('Redirecionando para o Asaas...', 'bg-emerald-500');
+                    setTimeout(() => { window.location.href = data.asaas_payment_url; }, 1500);
+                } else { 
+                    showToast('Cadastro realizado!', 'bg-emerald-500'); 
+                    switchView('view-login'); 
+                }
+            } catch (err) { showToast(err.message); } finally { btn.innerText = "Cadastrar"; btn.disabled = false; }
+        });
+
+        document.getElementById('form-login').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btnText = document.getElementById('login-btn-text');
+            btnText.innerText = "Autenticando...";
+            const emailInput = document.getElementById('login-email').value;
+            const formData = new URLSearchParams(); formData.append('username', emailInput); formData.append('password', document.getElementById('login-password').value);
+            
+            try {
+                const response = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
+                const data = await response.json();
+                if (!response.ok) throw new Error('Dados incorretos');
+                
+                localStorage.setItem('token', data.access_token); 
+                localStorage.setItem('user_role', data.role); 
+                localStorage.setItem('user_email', emailInput); 
+                localStorage.setItem('user_name', emailInput.split('@')[0]);
+                document.getElementById('user-display-name').innerText = localStorage.getItem('user_name');
+                
+                if(data.role === 'CLIENTE') { 
+                    document.getElementById('panel-cliente').classList.remove('hidden'); 
+                    document.getElementById('panel-eletricista').classList.add('hidden'); 
+                } else { 
+                    document.getElementById('panel-eletricista').classList.remove('hidden'); 
+                    document.getElementById('panel-cliente').classList.add('hidden'); 
+                }
+                
+                switchView('view-dashboard');
+                if(verificarPaywall(data.status_assinatura, data.role)) document.getElementById('paywall-link').href = data.payment_url || '#';
+            } catch (err) { showToast(err.message); } finally { btnText.innerText = "Entrar"; }
+        });
+
+        // --- INTEGRAÇÕES COM A API ---
+
+        // 1. Cliente Busca Eletricistas
+        async function buscarEletricistasAPI() {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_URL}/buscar-eletricistas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ latitude: currentLat, longitude: currentLon }) });
+                if (response.status === 401) { logout(); return; }
+                const dataRes = await response.json();
+                
+                document.getElementById('eletricistas-list').innerHTML = '';
+                professionalsLayer.clearLayers();
+
+                if ((dataRes.profissionais || []).length === 0) { document.getElementById('eletricistas-list').innerHTML = '<div class="text-center text-sm text-slate-400 py-6 bg-slate-50 rounded-lg border border-slate-100">Nenhum eletricista próximo.</div>'; return; }
+
+                dataRes.profissionais.forEach(prof => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-3 rounded-lg border border-slate-200 shadow-sm";
+                    card.innerHTML = `<div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-800">${prof.nome}</span><span class="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">${prof.distancia_km.toFixed(1)} km</span></div>
+                                      <button onclick="chamarEletricista('${prof.id_eletricista}')" class="mt-2 w-full bg-slate-900 hover:bg-blue-600 text-white font-medium text-xs py-2 rounded transition-colors">Solicitar</button>`;
+                    document.getElementById('eletricistas-list').appendChild(card);
+                    
+                    L.marker([prof.latitude, prof.longitude])
+                     .addTo(professionalsLayer)
+                     .bindPopup(`<b>${prof.nome}</b><br><a href="https://wa.me/55${prof.telefone.replace(/\D/g, '')}" target="_blank">Falar no WhatsApp</a>`);
+                });
+            } catch (err) { console.log(err); }
+        }
+
+        // 2. Cliente Chama Eletricista
+        async function chamarEletricista(idEletricista) {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_URL}/chamados`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ id_eletricista: idEletricista }) });
+                if (response.ok) {
+                    showToast('Chamado registrado! Verifique a aba Chamados.', 'bg-emerald-500');
+                    carregarChamados(); // Atualiza a lista na hora
+                }
+            } catch (e) { showToast('Erro ao processar chamado.'); }
+        }
+
+        // 3. Carregar Histórico de Chamados (Para Ambos)
+        async function carregarChamados() {
+            const token = localStorage.getItem('token');
+            if(!token) return;
+            try {
+                const response = await fetch(`${API_URL}/chamados`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!response.ok) return;
+                const chamados = await response.json();
+                const container = document.getElementById('lista-chamados');
+                
+                if(chamados.length === 0) {
+                    container.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center"><div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-3xl mb-4">📋</div><h3 class="text-lg font-bold text-slate-800">Nenhum chamado listado</h3></div>`;
+                    return;
+                }
+
+                container.innerHTML = '';
+                const role = localStorage.getItem('user_role');
+                
+                chamados.forEach(c => {
+                    const dataObj = new Date(c.data);
+                    const dataFormatada = dataObj.toLocaleDateString('pt-BR') + ' às ' + dataObj.toLocaleTimeString('pt-BR').substring(0,5);
+                    const isCliente = role === 'CLIENTE';
+                    const labelProfissao = isCliente ? 'Eletricista' : 'Cliente';
+                    const telefoneTratado = (c.telefone_contato || '').replace(/\D/g, '');
+
+                    const div = document.createElement('div');
+                    div.className = "bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-center space-y-4 md:space-y-0 hover:border-blue-300 transition-colors";
+                    div.innerHTML = `
+                        <div>
+                            <span class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded uppercase tracking-wide">${c.status.replace('_', ' ')}</span>
+                            <h3 class="text-lg font-bold text-slate-800 mt-2">${labelProfissao}: <span class="text-blue-600">${c.nome_contato}</span></h3>
+                            <p class="text-sm text-slate-500 mt-1">🕒 Solicitado: ${dataFormatada}</p>
+                        </div>
+                        <div>
+                            <a href="https://wa.me/55${telefoneTratado}" target="_blank" class="w-full md:w-auto inline-flex justify-center items-center bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-6 rounded-lg transition-colors shadow-sm">
+                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.418-.099.824z"/></svg>
+                                Falar no WhatsApp
+                            </a>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch(e) { console.error("Erro ao carregar chamados", e); }
+        }
+
+        // 4. GPS Eletricista Online
+        async function toggleOnlineStatus() {
+            const isOnline = document.getElementById('status-toggle').checked;
+            if (isOnline) {
+                document.getElementById('status-label').innerText = "Online"; document.getElementById('timer-indicator').classList.remove('hidden');
+                enviarLocalizacaoEletricista(true);
+                loopLocalizacaoEletricista = setInterval(() => { enviarLocalizacaoEletricista(true); }, 30000); 
+            } else {
+                document.getElementById('status-label').innerText = "Offline"; document.getElementById('timer-indicator').classList.add('hidden');
+                if (loopLocalizacaoEletricista) clearInterval(loopLocalizacaoEletricista);
+                enviarLocalizacaoEletricista(false);
+            }
+        }
+
+        async function enviarLocalizacaoEletricista(statusOnline) {
+            const token = localStorage.getItem('token');
+            if(navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    // Eletricista também atualiza seu próprio mapa se estiver na tela "Início"
+                    currentLat = pos.coords.latitude; currentLon = pos.coords.longitude;
+                    updateMapCenter(false); 
+                    
+                    await fetch(`${API_URL}/eletricista/localizacao`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ status_online: statusOnline, latitude: pos.coords.latitude, longitude: pos.coords.longitude }) });
+                }, null, { enableHighAccuracy: true });
+            }
+        }
+
+        // --- SISTEMA ---
+        function logout() {
+            if (loopLocalizacaoEletricista) clearInterval(loopLocalizacaoEletricista);
+            if (loopBuscaCliente) clearInterval(loopBuscaCliente);
+            if (loopChamados) clearInterval(loopChamados);
+            localStorage.clear(); switchView('view-login');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('token')) {
+                document.getElementById('user-display-name').innerText = localStorage.getItem('user_name') || 'Usuário';
+                if(localStorage.getItem('user_role') === 'CLIENTE') { document.getElementById('panel-cliente').classList.remove('hidden'); } else { document.getElementById('panel-eletricista').classList.remove('hidden'); }
+                switchView('view-dashboard');
+            } else { switchView('view-login'); }
+        });
+    </script>
+</body>
+</html>
