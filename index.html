@@ -24,7 +24,7 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .icone-eletricista-container span {
-            color: #f59e0b; /* Amarelo Vivo (Amber-500) */
+            color: #f59e0b;
             font-size: 22px;
             font-weight: bold;
             line-height: 1;
@@ -38,6 +38,15 @@
 
     <div id="toast" class="fixed top-5 right-5 z-[9999] transform translate-y-[-20px] opacity-0 transition-all duration-300 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl hidden flex items-center space-x-2">
         <span id="toast-message">Erro</span>
+    </div>
+
+    <div id="modal-novo-chamado" class="fixed inset-0 bg-slate-950/80 z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-amber-400">
+            <div class="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto text-amber-400 text-4xl mb-4 animate-bounce">⚡</div>
+            <h2 class="text-2xl font-black text-slate-900 uppercase tracking-wide">Novo Chamado!</h2>
+            <p class="text-slate-600 mt-2 font-medium">Um cliente acaba de solicitar seus serviços.</p>
+            <button onclick="fecharModalChamado()" class="mt-6 w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-4 rounded-xl shadow-lg transition-colors text-lg">VER DETALHES NO HISTÓRICO</button>
+        </div>
     </div>
 
     <div id="paywall-screen" class="fixed inset-0 bg-slate-950/90 z-[9000] hidden flex items-center justify-center p-4">
@@ -112,7 +121,7 @@
                         </button>
                         <p class="text-xs text-slate-400 text-center mb-2 flex items-center justify-center space-x-1">
                             <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse block"></span>
-                            <span>Buscando eletricistas (5s)...</span>
+                            <span>Buscando profissionais (5s)...</span>
                         </p>
                         <div id="eletricistas-list" class="flex-1 overflow-y-auto space-y-3 mt-2 pr-1"></div>
                     </div>
@@ -136,9 +145,6 @@
 
                 <div id="map-container" class="flex-1 relative bg-slate-200 h-[400px] md:h-auto z-0">
                     <div id="map"></div>
-                    <div class="absolute bottom-4 left-4 z-[1000] bg-white/95 px-3 py-1.5 rounded shadow border border-slate-200 text-xs font-bold text-slate-700 flex items-center space-x-1">
-                        <span>📐 Raio do GPS: 15 km</span>
-                    </div>
                 </div>
             </div>
 
@@ -177,8 +183,11 @@
         
         let qtdeChamadosAnterior = -1; 
         const somChoque = document.getElementById('som-choque');
+        
+        // Objeto para guardar o histórico de rotas dos eletricistas
+        let rastroEletricistas = {};
 
-        // Ícone personalizado de Raio
+        // Ícone personalizado de Raio (Apenas Eletricistas)
         const iconeRaioEletricista = L.divIcon({
             className: 'custom-pin',
             html: '<div class="icone-eletricista-container"><span>⚡</span></div>',
@@ -189,7 +198,12 @@
 
         function playChoqueSound() {
             somChoque.currentTime = 0;
-            somChoque.play().catch(e => console.log("Áudio bloqueado pelo navegador até haver interação:", e));
+            somChoque.play().catch(e => console.log("Áudio bloqueado até interação:", e));
+        }
+
+        function fecharModalChamado() {
+            document.getElementById('modal-novo-chamado').classList.add('hidden');
+            switchTab('dash-chamados');
         }
 
         function showToast(message, bgColor = "bg-red-500") {
@@ -229,7 +243,7 @@
                 getGPSLocation(true);
                 switchTab('dash-home');
                 
-                // INICIA LOOPS DE ATUALIZAÇÃO - A CADA 5 SEGUNDOS
+                // Loops de 5 segundos
                 if (localStorage.getItem('user_role') === 'CLIENTE' && !loopBuscaCliente) {
                     loopBuscaCliente = setInterval(() => { getGPSLocation(false); }, 5000);
                 }
@@ -265,6 +279,7 @@
         function updateMapCenter(recenter) {
             if (map) {
                 if (recenter) map.setView([currentLat, currentLon], 14);
+                // O Cliente sempre usará o Pino Azul nativo (Padrão Leaflet)
                 if (clientMarker) map.removeLayer(clientMarker);
                 clientMarker = L.marker([currentLat, currentLon]).addTo(map).bindPopup("Você está aqui");
                 if (localStorage.getItem('user_role') === 'CLIENTE') buscarEletricistasAPI();
@@ -278,14 +293,10 @@
             btn.innerText = "Processando..."; btn.disabled = true;
 
             const payload = { 
-                nome: document.getElementById('reg-nome').value, 
-                email: document.getElementById('reg-email').value, 
-                telefone: document.getElementById('reg-telefone').value, 
-                cpf: document.getElementById('reg-cpf').value, 
-                password: document.getElementById('reg-password').value, 
-                tipo_usuario: document.getElementById('reg-tipo').value, 
-                consentimento_lgpd: document.getElementById('reg-lgpd').checked, 
-                versao_termos: "1.0" 
+                nome: document.getElementById('reg-nome').value, email: document.getElementById('reg-email').value, 
+                telefone: document.getElementById('reg-telefone').value, cpf: document.getElementById('reg-cpf').value, 
+                password: document.getElementById('reg-password').value, tipo_usuario: document.getElementById('reg-tipo').value, 
+                consentimento_lgpd: document.getElementById('reg-lgpd').checked, versao_termos: "1.0" 
             };
 
             try {
@@ -311,7 +322,6 @@
             const formData = new URLSearchParams(); formData.append('username', emailInput); formData.append('password', document.getElementById('login-password').value);
             
             try {
-                // Toca áudio silencioso para desbloquear a política do navegador pós-interação do usuário
                 somChoque.play().then(() => { somChoque.pause(); somChoque.currentTime = 0; }).catch(e=>{});
 
                 const response = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
@@ -320,7 +330,6 @@
                 
                 localStorage.setItem('token', data.access_token); 
                 localStorage.setItem('user_role', data.role); 
-                localStorage.setItem('user_email', emailInput); 
                 localStorage.setItem('user_name', emailInput.split('@')[0]);
                 document.getElementById('user-display-name').innerText = localStorage.getItem('user_name');
                 
@@ -339,7 +348,7 @@
             } catch (err) { showToast(err.message); } finally { btnText.innerText = "Entrar"; }
         });
 
-        // 1. Cliente Busca Eletricistas
+        // 1. Cliente Busca Eletricistas e Rastro
         async function buscarEletricistasAPI() {
             const token = localStorage.getItem('token');
             try {
@@ -359,13 +368,29 @@
                     const card = document.createElement('div');
                     card.className = "bg-white p-3 rounded-lg border border-slate-200 shadow-sm";
                     card.innerHTML = `<div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-800">${prof.nome}</span><span class="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">${prof.distancia_km.toFixed(1)} km</span></div>
-                                      <button onclick="chamarEletricista('${prof.id_eletricista}')" class="mt-2 w-full bg-slate-900 hover:bg-blue-600 text-white font-medium text-xs py-2 rounded transition-colors">Solicitar</button>`;
+                                      <button onclick="chamarEletricista('${prof.id_eletricista}')" class="mt-2 w-full bg-slate-900 hover:bg-blue-600 text-white font-medium text-xs py-2 rounded transition-colors">Solicitar Eletricista</button>`;
                     document.getElementById('eletricistas-list').appendChild(card);
                     
+                    // --- LÓGICA DO RASTRO ---
+                    if (!rastroEletricistas[prof.id_eletricista]) rastroEletricistas[prof.id_eletricista] = [];
+                    
+                    // Adiciona a posição apenas se ele tiver se movido
+                    const posAtual = [prof.latitude, prof.longitude];
+                    const rastroLocal = rastroEletricistas[prof.id_eletricista];
+                    if (rastroLocal.length === 0 || (rastroLocal[rastroLocal.length-1][0] !== posAtual[0] || rastroLocal[rastroLocal.length-1][1] !== posAtual[1])) {
+                        rastroLocal.push(posAtual);
+                    }
+                    if (rastroLocal.length > 50) rastroLocal.shift(); // Evita travar a memória mantendo apenas os últimos 50 pontos
+                    
+                    // Desenha o rastro (linha tracejada amarela)
+                    if (rastroLocal.length > 1) {
+                        L.polyline(rastroLocal, { color: '#f59e0b', weight: 4, opacity: 0.8, dashArray: '10, 10' }).addTo(professionalsLayer);
+                    }
+
                     // Renderiza o novo ícone customizado no mapa
-                    L.marker([prof.latitude, prof.longitude], { icon: iconeRaioEletricista })
+                    L.marker(posAtual, { icon: iconeRaioEletricista })
                      .addTo(professionalsLayer)
-                     .bindPopup(`<b>${prof.nome}</b><br><a href="https://wa.me/55${prof.telefone.replace(/\D/g, '')}" target="_blank">Falar no WhatsApp</a>`);
+                     .bindPopup(`<b>${prof.nome}</b><br><a href="https://wa.me/55${prof.telefone.replace(/\D/g, '')}" target="_blank">WhatsApp</a>`);
                 });
             } catch (err) { console.log(err); }
         }
@@ -376,14 +401,14 @@
             try {
                 const response = await fetch(`${API_URL}/chamados`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ id_eletricista: idEletricista }) });
                 if (response.ok) {
-                    playChoqueSound(); // Som para confirmar envio
+                    playChoqueSound(); // Feedback para o cliente saber que foi
                     showToast('Chamado enviado ao Eletricista!', 'bg-emerald-500');
                     carregarChamados(); 
                 }
             } catch (e) { showToast('Erro ao processar chamado.'); }
         }
 
-        // 3. Carregar Histórico e Tocar Som de Choque para o Eletricista
+        // 3. Carregar Histórico e Tocar Som de Choque + PopUp para o Eletricista
         async function carregarChamados() {
             const token = localStorage.getItem('token');
             if(!token) return;
@@ -394,10 +419,10 @@
                 
                 const role = localStorage.getItem('user_role');
                 
-                // Tocar som de choque se chegar um chamado novo para o Eletricista
+                // POP-UP e SOM se chegar um chamado novo
                 if (qtdeChamadosAnterior !== -1 && chamados.length > qtdeChamadosAnterior && role === 'ELETRICISTA') {
                     playChoqueSound();
-                    showToast('⚡ NOVO CHAMADO RECEBIDO!', 'bg-amber-500');
+                    document.getElementById('modal-novo-chamado').classList.remove('hidden');
                 }
                 qtdeChamadosAnterior = chamados.length;
 
@@ -461,11 +486,16 @@
         }
 
         // --- SISTEMA ---
-        function logout() {
+        async function logout() {
+            // Se for Eletricista, força a saída para OFFLINE no banco de dados para ele não ficar como fantasma
+            if (localStorage.getItem('user_role') === 'ELETRICISTA') {
+                await enviarLocalizacaoEletricista(false);
+            }
             if (loopLocalizacaoEletricista) clearInterval(loopLocalizacaoEletricista);
             if (loopBuscaCliente) clearInterval(loopBuscaCliente);
             if (loopChamados) clearInterval(loopChamados);
-            localStorage.clear(); switchView('view-login');
+            localStorage.clear(); 
+            switchView('view-login');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
