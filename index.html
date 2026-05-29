@@ -11,26 +11,30 @@
         #map { height: 100%; width: 100%; z-index: 1; }
         .hidden { display: none !important; }
         
-        /* CSS do novo ícone do Eletricista */
+        /* CSS do novo ícone do Eletricista: Raio amarelo dentro de círculo preto */
         .icone-eletricista-container {
-            background-color: #000;
-            width: 34px;
-            height: 34px;
+            background-color: #000000;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             display: flex;
             justify-content: center;
             align-items: center;
-            border: 2px solid #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .icone-eletricista-container span {
-            color: #fbbf24; /* Amarelo (Tailwind amber-400) */
-            font-size: 20px;
+            color: #f59e0b; /* Amarelo Vivo (Amber-500) */
+            font-size: 22px;
+            font-weight: bold;
+            line-height: 1;
             margin-top: 2px;
         }
     </style>
 </head>
 <body class="bg-slate-50 font-sans text-slate-800 antialiased">
+
+    <audio id="som-choque" src="https://actions.google.com/sounds/v1/science_fiction/electric_spark.ogg" preload="auto"></audio>
 
     <div id="toast" class="fixed top-5 right-5 z-[9999] transform translate-y-[-20px] opacity-0 transition-all duration-300 bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl hidden flex items-center space-x-2">
         <span id="toast-message">Erro</span>
@@ -54,7 +58,7 @@
                 <input type="password" id="login-password" placeholder="Senha" required class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors"><span id="login-btn-text">Entrar</span></button>
             </form>
-            <p class="mt-6 text-center text-sm">Não tem conta? <button onclick="switchView('view-register')" class="text-blue-600 font-bold hover:underline">Cadastre-se</button></p>
+            <p class="mt-6 text-center text-sm">Não tem conta? <button type="button" onclick="switchView('view-register')" class="text-blue-600 font-bold hover:underline">Cadastre-se</button></p>
         </div>
     </section>
 
@@ -77,7 +81,7 @@
                 </div>
                 <button type="submit" id="reg-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors">Cadastrar</button>
             </form>
-            <p class="mt-6 text-center text-sm"><button onclick="switchView('view-login')" class="text-blue-600 font-bold hover:underline">Voltar ao Login</button></p>
+            <p class="mt-6 text-center text-sm"><button type="button" onclick="switchView('view-login')" class="text-blue-600 font-bold hover:underline">Voltar ao Login</button></p>
         </div>
     </section>
 
@@ -171,17 +175,22 @@
         let currentLat = -22.8262, currentLon = -47.0755;
         let loopLocalizacaoEletricista = null, loopBuscaCliente = null, loopChamados = null;
         
-        // Variável para controlar os avisos sonoros
         let qtdeChamadosAnterior = -1; 
-        
+        const somChoque = document.getElementById('som-choque');
+
         // Ícone personalizado de Raio
         const iconeRaioEletricista = L.divIcon({
             className: 'custom-pin',
             html: '<div class="icone-eletricista-container"><span>⚡</span></div>',
-            iconSize: [34, 34],
-            iconAnchor: [17, 17],
-            popupAnchor: [0, -17]
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            popupAnchor: [0, -18]
         });
+
+        function playChoqueSound() {
+            somChoque.currentTime = 0;
+            somChoque.play().catch(e => console.log("Áudio bloqueado pelo navegador até haver interação:", e));
+        }
 
         function showToast(message, bgColor = "bg-red-500") {
             const toast = document.getElementById('toast');
@@ -220,7 +229,7 @@
                 getGPSLocation(true);
                 switchTab('dash-home');
                 
-                // INICIA LOOPS DE ATUALIZAÇÃO - AGORA A CADA 5 SEGUNDOS
+                // INICIA LOOPS DE ATUALIZAÇÃO - A CADA 5 SEGUNDOS
                 if (localStorage.getItem('user_role') === 'CLIENTE' && !loopBuscaCliente) {
                     loopBuscaCliente = setInterval(() => { getGPSLocation(false); }, 5000);
                 }
@@ -302,6 +311,9 @@
             const formData = new URLSearchParams(); formData.append('username', emailInput); formData.append('password', document.getElementById('login-password').value);
             
             try {
+                // Toca áudio silencioso para desbloquear a política do navegador pós-interação do usuário
+                somChoque.play().then(() => { somChoque.pause(); somChoque.currentTime = 0; }).catch(e=>{});
+
                 const response = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData });
                 const data = await response.json();
                 if (!response.ok) throw new Error('Dados incorretos');
@@ -321,7 +333,6 @@
                 }
                 
                 switchView('view-dashboard');
-                // Se a API retornar pendente para o Eletricista, mostra a tela e atualiza o link de pagamento
                 if(verificarPaywall(data.status_assinatura, data.role)) {
                     document.getElementById('paywall-link').href = data.payment_url || '#';
                 }
@@ -339,7 +350,10 @@
                 document.getElementById('eletricistas-list').innerHTML = '';
                 professionalsLayer.clearLayers();
 
-                if ((dataRes.profissionais || []).length === 0) { document.getElementById('eletricistas-list').innerHTML = '<div class="text-center text-sm text-slate-400 py-6 bg-slate-50 rounded-lg border border-slate-100">Nenhum eletricista próximo.</div>'; return; }
+                if ((dataRes.profissionais || []).length === 0) { 
+                    document.getElementById('eletricistas-list').innerHTML = '<div class="text-center text-sm text-slate-400 py-6 bg-slate-50 rounded-lg border border-slate-100">Nenhum eletricista próximo.</div>'; 
+                    return; 
+                }
 
                 dataRes.profissionais.forEach(prof => {
                     const card = document.createElement('div');
@@ -362,13 +376,14 @@
             try {
                 const response = await fetch(`${API_URL}/chamados`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ id_eletricista: idEletricista }) });
                 if (response.ok) {
+                    playChoqueSound(); // Som para confirmar envio
                     showToast('Chamado enviado ao Eletricista!', 'bg-emerald-500');
                     carregarChamados(); 
                 }
             } catch (e) { showToast('Erro ao processar chamado.'); }
         }
 
-        // 3. Carregar Histórico e Tocar Som de Choque
+        // 3. Carregar Histórico e Tocar Som de Choque para o Eletricista
         async function carregarChamados() {
             const token = localStorage.getItem('token');
             if(!token) return;
@@ -379,14 +394,11 @@
                 
                 const role = localStorage.getItem('user_role');
                 
-                // Lógica do efeito sonoro (Alarme de choque/energia) para o Eletricista
+                // Tocar som de choque se chegar um chamado novo para o Eletricista
                 if (qtdeChamadosAnterior !== -1 && chamados.length > qtdeChamadosAnterior && role === 'ELETRICISTA') {
-                    // Áudio nativo da biblioteca sci-fi do Google
-                    const audio = new Audio('https://actions.google.com/sounds/v1/science_fiction/electric_spark.ogg');
-                    audio.play().catch(e => console.log("O navegador bloqueou o áudio automático."));
+                    playChoqueSound();
                     showToast('⚡ NOVO CHAMADO RECEBIDO!', 'bg-amber-500');
                 }
-                // Atualiza o contador de chamados
                 qtdeChamadosAnterior = chamados.length;
 
                 const container = document.getElementById('lista-chamados');
@@ -429,7 +441,6 @@
             if (isOnline) {
                 document.getElementById('status-label').innerText = "Online"; document.getElementById('timer-indicator').classList.remove('hidden');
                 enviarLocalizacaoEletricista(true);
-                // LOOP ALTERADO PARA 5 SEGUNDOS
                 loopLocalizacaoEletricista = setInterval(() => { enviarLocalizacaoEletricista(true); }, 5000); 
             } else {
                 document.getElementById('status-label').innerText = "Offline"; document.getElementById('timer-indicator').classList.add('hidden');
